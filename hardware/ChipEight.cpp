@@ -97,7 +97,7 @@ void ChipEight::executeCycle()
 
         if (soundRegister > 0)
         {
-            Beep(900, 16);
+            Beep(500, 16);
         }
     }
 }

@@ -1,6 +1,7 @@
 #include <iostream>
 #include <chrono>
 #include <sys/stat.h>
+#include <string>
 #include "hardware/ChipEight.h"
 
 /**
@@ -17,6 +18,7 @@ bool fileExists(const char *path)
 const char *extractROMName(const char *path)
 {
     // TODO: finish
+    return nullptr;
 }
 
 int main(int argc, char **args)
