@@ -1,9 +1,13 @@
 #include "ChipEight.h"
 #include <fstream>
 #include <iostream>
-#include <cstring>
-#include <windows.h>
 #include <chrono>
+
+#ifdef _WIN64
+
+#include <windows.h>
+
+#endif
 
 
 /**
@@ -95,10 +99,12 @@ void ChipEight::executeCycle()
     {
         --soundRegister;
 
+#ifdef WIN64
         if (soundRegister > 0)
         {
             Beep(500, 16);
         }
+#endif
     }
 }
 
