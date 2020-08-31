@@ -64,6 +64,8 @@ private:
     uint8_t keypad[16]{};
     uint16_t stack[16]{};
     uint8_t memory[4096]{};
+    bool loadStoreQuirk;
+    bool shiftQuirk;
 
     void OP_00E0();
 
@@ -156,13 +158,14 @@ public:
 
     void processInputs();
 
-    void updateScreen(const void *buffer, int pitch) const;
+    void updateScreen(const void *buffer, int pitch);
 
     void setupScreen(const char *title, unsigned int scale);
 
     void writeToMemory(int index, uint8_t value);
 
-    ChipEight();
+    ChipEight(bool loadStoreQuirk, bool shiftQuirk);
+
     ~ChipEight();
 };
 

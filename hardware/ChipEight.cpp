@@ -5,10 +5,12 @@
 #include <windows.h>
 #include <chrono>
 
+
 /**
  * Initialise Chip-8
  */
-ChipEight::ChipEight() : randGen(std::chrono::system_clock::now().time_since_epoch().count())
+ChipEight::ChipEight(bool loadStoreQuirk, bool shiftQuirk)
+        : randGen(std::chrono::system_clock::now().time_since_epoch().count())
 {
     // Set all vars to initial values
     opcode = -1;
@@ -23,6 +25,8 @@ ChipEight::ChipEight() : randGen(std::chrono::system_clock::now().time_since_epo
     memset(memory, 0, sizeof(memory));
     shouldRun = true;
     drawFlag = false;
+    this->loadStoreQuirk = loadStoreQuirk;
+    this->shiftQuirk = shiftQuirk;
 
     // Load font set into memory 0x00 - 0x50 (0 to 80)
     for (int i = 0; i < FONT_SET_SIZE; i++)
@@ -69,15 +73,18 @@ void ChipEight::LoadROM(const char *path)
  */
 void ChipEight::executeCycle()
 {
-    // Opcode is 2 bytes long, so merge two successive bytes
-    // Extend first byte to 16 bits (by shifting left 8 which pads 8 zeroes effectively), then
-    // OR with next byte to replace padded zeroes with the second byte's value
-    opcode = (memory[pc] << 8u) | memory[pc + 1];
+    for (int i = 0; i < 8; i++)
+    {
+        // Opcode is 2 bytes long, so merge two successive bytes
+        // Extend first byte to 16 bits (by shifting left 8 which pads 8 zeroes effectively), then
+        // OR with next byte to replace padded zeroes with the second byte's value
+        opcode = (memory[pc] << 8u) | memory[pc + 1];
 
-    // Pre-emptively add 2 to PC, to move to next opcode (executed opcode may overwrite this)
-    pc += 2;
+        // Pre-emptively add 2 to PC, to move to next opcode (executed opcode may overwrite this)
+        pc += 2;
 
-    executeOpCode();
+        executeOpCode();
+    }
 
     if (delayRegister > 0)
     {
@@ -87,9 +94,10 @@ void ChipEight::executeCycle()
     if (soundRegister > 0)
     {
         --soundRegister;
+
         if (soundRegister > 0)
         {
-            Beep(420, 17);
+            Beep(900, 16);
         }
     }
 }
@@ -345,7 +353,7 @@ ChipEight::~ChipEight()
  * @param buffer Array of pixels
  * @param pitch Pitch used by SDL
  */
-void ChipEight::updateScreen(const void *buffer, int pitch) const
+void ChipEight::updateScreen(const void *buffer, int pitch)
 {
     if (!drawFlag)
     {
@@ -356,6 +364,7 @@ void ChipEight::updateScreen(const void *buffer, int pitch) const
     SDL_RenderClear(renderer);
     SDL_RenderCopy(renderer, texture, nullptr, nullptr);
     SDL_RenderPresent(renderer);
+    drawFlag = false;
 }
 
 /**
@@ -732,11 +741,16 @@ void ChipEight::OP_8XY5()
 void ChipEight::OP_8XY6()
 {
     uint8_t Vx = (opcode & 0x0F00u) >> 8u;
+    uint8_t Vy = (opcode & 0x00F0u) >> 4u;
+
+    if (shiftQuirk)
+    {
+        Vy = Vx;
+    }
 
     // Save LSB in VF
-    registers[0xF] = (registers[Vx] & 0x1u);
-
-    registers[Vx] >>= 1u;
+    registers[0xF] = (registers[Vy] & 0x1u);
+    registers[Vx] = registers[Vy] >> 1u;
 }
 
 /**
@@ -765,8 +779,15 @@ void ChipEight::OP_8XY7()
 void ChipEight::OP_8XYE()
 {
     uint8_t Vx = (opcode & 0x0F00u) >> 8u;
-    registers[0xF] = (registers[Vx] & 0x80u) >> 7u;
-    registers[Vx] <<= 1u;
+    uint8_t Vy = (opcode & 0x00F0u) >> 4u;
+
+    if (shiftQuirk)
+    {
+        Vy = Vx;
+    }
+
+    registers[0xF] = (registers[Vy] & 0x80u) >> 7u;
+    registers[Vx] = registers[Vy] << 1u;
 }
 
 /**
@@ -817,15 +838,14 @@ void ChipEight::OP_CXKK()
  */
 void ChipEight::OP_DXYN()
 {
-
     // Extract Vx, Vy, n (height)
     uint8_t height = (opcode & 0x000Fu);
     uint8_t Vx = (opcode & 0x0F00u) >> 8u;
     uint8_t Vy = (opcode & 0x00F0u) >> 4u;
 
-    // Wrap pixels around if they overflow off screen
-    uint8_t x = registers[Vx] % VIDEO_WIDTH;
-    uint8_t y = registers[Vy] % VIDEO_HEIGHT;
+    // Extract x & y from registers
+    uint8_t x = registers[Vx];
+    uint8_t y = registers[Vy];
 
     // Set VF register to 0
     registers[0xF] = 0;
@@ -838,7 +858,10 @@ void ChipEight::OP_DXYN()
         {
             // Get each pixel by shifting (0x80 = 1000 0000)
             uint8_t spritePixel = spriteByte & (0x80u >> col);
-            uint32_t *screenPixel = &video[(y + row) * VIDEO_WIDTH + (x + col)];
+
+            // Get pixel index in 1D array using: X + (Y * WIDTH) and modulo to wrap around x,y coords
+            // - without wrapping index goes outside video array
+            uint32_t *screenPixel = &video[((x + col) % VIDEO_WIDTH) + (((y + row) % VIDEO_HEIGHT) * VIDEO_WIDTH)];
 
             // Sprite pixel is on
             if (spritePixel)
@@ -899,22 +922,92 @@ void ChipEight::OP_FX07()
 void ChipEight::OP_FX0A()
 {
     uint8_t Vx = (opcode & 0x0F00u) >> 8u;
-    bool keyPressed = false;
 
-    for (int i = 0; i <= 15; i++)
+    if (keypad[0])
     {
-        if (keypad[i])
-        {
-            keyPressed = true;
-            registers[Vx] = i;
-            break;
-        }
+        registers[Vx] = 0;
     }
-
-    if (!keyPressed)
+    else if (keypad[1])
+    {
+        registers[Vx] = 1;
+    }
+    else if (keypad[2])
+    {
+        registers[Vx] = 2;
+    }
+    else if (keypad[3])
+    {
+        registers[Vx] = 3;
+    }
+    else if (keypad[4])
+    {
+        registers[Vx] = 4;
+    }
+    else if (keypad[5])
+    {
+        registers[Vx] = 5;
+    }
+    else if (keypad[6])
+    {
+        registers[Vx] = 6;
+    }
+    else if (keypad[7])
+    {
+        registers[Vx] = 7;
+    }
+    else if (keypad[8])
+    {
+        registers[Vx] = 8;
+    }
+    else if (keypad[9])
+    {
+        registers[Vx] = 9;
+    }
+    else if (keypad[10])
+    {
+        registers[Vx] = 10;
+    }
+    else if (keypad[11])
+    {
+        registers[Vx] = 11;
+    }
+    else if (keypad[12])
+    {
+        registers[Vx] = 12;
+    }
+    else if (keypad[13])
+    {
+        registers[Vx] = 13;
+    }
+    else if (keypad[14])
+    {
+        registers[Vx] = 14;
+    }
+    else if (keypad[15])
+    {
+        registers[Vx] = 15;
+    }
+    else
     {
         pc -= 2;
     }
+
+//    bool keyPressed = false;
+//
+//    for (int i = 0; i <= 15; i++)
+//    {
+//        if (keypad[i])
+//        {
+//            keyPressed = true;
+//            registers[Vx] = i;
+//            break;
+//        }
+//    }
+//
+//    if (!keyPressed)
+//    {
+//        pc -= 2;
+//    }
 }
 
 /**
@@ -986,6 +1079,11 @@ void ChipEight::OP_FX55()
     {
         writeToMemory(indexRegister + i, registers[i]);
     }
+
+    if (!loadStoreQuirk)
+    {
+        indexRegister += Vx + 1;
+    }
 }
 
 /**
@@ -998,6 +1096,11 @@ void ChipEight::OP_FX65()
     for (int i = 0; i <= Vx; i++)
     {
         registers[i] = memory[indexRegister + i];
+    }
+
+    if (!loadStoreQuirk)
+    {
+        indexRegister += Vx + 1;
     }
 }
 

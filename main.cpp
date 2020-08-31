@@ -8,10 +8,15 @@
  * @param path Path to file
  * @return True if exists, false otherwise
  */
-bool file_exists(const char *path)
+bool fileExists(const char *path)
 {
     struct stat buffer{};
     return (stat(path, &buffer) == 0);
+}
+
+const char *extractROMName(const char *path)
+{
+    // TODO: finish
 }
 
 int main(int argc, char **args)
@@ -28,16 +33,16 @@ int main(int argc, char **args)
     float delay = std::stof(args[2]);
 
     // Check ROM file exists
-    if (!file_exists(name))
+    if (!fileExists(name))
     {
         std::cout << "ROM DOES NOT EXIST: " << name << std::endl;
         exit(-1);
     }
 
     // Set up Chip-8, load the ROM and create the SDL window
-    ChipEight chipEight;
+    ChipEight chipEight(true, true);
     chipEight.LoadROM(name);
-    chipEight.setupScreen("pong", 1);
+    chipEight.setupScreen("Chip-8", 20);
 
     auto lastCycleTime = std::chrono::high_resolution_clock::now();
 
@@ -47,7 +52,7 @@ int main(int argc, char **args)
         auto currentTime = std::chrono::high_resolution_clock::now();
         float dt = std::chrono::duration<float, std::chrono::milliseconds::period>(currentTime - lastCycleTime).count();
 
-        if (dt >= delay)
+        if (dt >= 16)
         {
             lastCycleTime = currentTime;
             chipEight.processInputs();
