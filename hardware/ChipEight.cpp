@@ -2,19 +2,16 @@
 #include <fstream>
 #include <iostream>
 #include <chrono>
-
-#ifdef _WIN64
-
-#include <windows.h>
-
-#endif
-
+#include <thread>
 
 /**
  * Initialise Chip-8
  */
-ChipEight::ChipEight(bool loadStoreQuirk, bool shiftQuirk)
-        : randGen(std::chrono::system_clock::now().time_since_epoch().count())
+ChipEight::ChipEight(bool _loadStoreQuirk, bool _shiftQuirk, int _cyclesPerTick) :
+        randGen(std::chrono::system_clock::now().time_since_epoch().count()),
+        loadStoreQuirk(_loadStoreQuirk),
+        shiftQuirk(_shiftQuirk),
+        cyclesPerTick(_cyclesPerTick)
 {
     // Set all vars to initial values
     opcode = -1;
@@ -29,8 +26,6 @@ ChipEight::ChipEight(bool loadStoreQuirk, bool shiftQuirk)
     memset(memory, 0, sizeof(memory));
     shouldRun = true;
     drawFlag = false;
-    this->loadStoreQuirk = loadStoreQuirk;
-    this->shiftQuirk = shiftQuirk;
 
     // Load font set into memory 0x00 - 0x50 (0 to 80)
     for (int i = 0; i < FONT_SET_SIZE; i++)
@@ -40,6 +35,9 @@ ChipEight::ChipEight(bool loadStoreQuirk, bool shiftQuirk)
 
     // Initialize RNG
     randByte = std::uniform_int_distribution<uint8_t>(0, 255U);
+
+    SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO);
+    beeper.init();
 }
 
 /**
@@ -73,11 +71,38 @@ void ChipEight::LoadROM(const char *path)
 }
 
 /**
+ * Decrements delay & sound registers
+ */
+void ChipEight::decrementTimers()
+{
+    if (delayRegister > 0)
+    {
+        --delayRegister;
+    }
+
+    if (soundRegister > 0)
+    {
+        --soundRegister;
+    }
+
+    if (soundRegister > 0)
+    {
+        beeper.play();
+    }
+    else
+    {
+        beeper.stop();
+    }
+}
+
+/**
  * Should be called each cycle to execute opcode and update delay & sound registers
  */
+int static count = 0;
+
 void ChipEight::executeCycle()
 {
-    for (int i = 0; i < 8; i++)
+    for (int i = 0; i < cyclesPerTick; i++)
     {
         // Opcode is 2 bytes long, so merge two successive bytes
         // Extend first byte to 16 bits (by shifting left 8 which pads 8 zeroes effectively), then
@@ -90,22 +115,7 @@ void ChipEight::executeCycle()
         executeOpCode();
     }
 
-    if (delayRegister > 0)
-    {
-        --delayRegister;
-    }
-
-    if (soundRegister > 0)
-    {
-        --soundRegister;
-
-#ifdef WIN64
-        if (soundRegister > 0)
-        {
-            Beep(500, 16);
-        }
-#endif
-    }
+    decrementTimers();
 }
 
 /**
@@ -348,6 +358,7 @@ void ChipEight::processInputs()
  */
 ChipEight::~ChipEight()
 {
+//    registerThread.join();
     SDL_DestroyTexture(texture);
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
@@ -381,8 +392,6 @@ void ChipEight::updateScreen(const void *buffer, int pitch)
  */
 void ChipEight::setupScreen(const char *title, unsigned int scale)
 {
-    SDL_Init(SDL_INIT_VIDEO);
-
     window = SDL_CreateWindow(title, 100, 200, scale * VIDEO_WIDTH, scale * VIDEO_HEIGHT, SDL_WINDOW_SHOWN);
     renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
     texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, VIDEO_WIDTH, VIDEO_HEIGHT);

@@ -4,6 +4,7 @@
 #include <string>
 #include "hardware/ChipEight.h"
 
+
 /**
  * Checks if a file exists at the given path
  * @param path Path to file
@@ -15,10 +16,32 @@ bool fileExists(const char *path)
     return (stat(path, &buffer) == 0);
 }
 
-const char *extractROMName(const char *path)
+/**
+ * Attempts to extracts rom name from a path
+ * @param path Path to file
+ * @return Name of file (if possible)
+ */
+std::string extractROMName(const char *path)
 {
-    // TODO: finish
-    return nullptr;
+    std::string s = path;
+    std::string result;
+    int index = s.find_last_of("/\\");
+
+    if (s.find_last_of("/\\") != std::string::npos)
+    {
+        // Name too short, no point in returning '/'
+        if (index > s.length() - 2)
+        {
+            result = path;
+        }
+
+        std::string ex = s.substr(index + 1, s.length() - (index));
+        return ex;
+    }
+    else
+    {
+        return path;
+    }
 }
 
 int main(int argc, char **args)
@@ -26,25 +49,27 @@ int main(int argc, char **args)
     // Ensure correct number of args are supplied
     if (argc != 3)
     {
+
         std::cout << "ERROR: Requires 2 args: <rom_path> <cycle_delay>";
         exit(-1);
     }
 
     // Extract command line args
-    const char *name = args[1];
-    float delay = std::stof(args[2]);
+    const char *path = args[1];
+    int cyclesPerTick = std::stoi(args[2]);
 
     // Check ROM file exists
-    if (!fileExists(name))
+    if (!fileExists(path))
     {
-        std::cout << "ROM DOES NOT EXIST: " << name << std::endl;
+        std::cout << "ROM DOES NOT EXIST: " << path << std::endl;
         exit(-1);
     }
+    std::string title = "Chip-8: " + extractROMName(path);
 
     // Set up Chip-8, load the ROM and create the SDL window
-    ChipEight chipEight(true, true);
-    chipEight.LoadROM(name);
-    chipEight.setupScreen("Chip-8", 20);
+    ChipEight chipEight(false, false, cyclesPerTick);
+    chipEight.LoadROM(path);
+    chipEight.setupScreen(title.c_str(), 20);
 
     auto lastCycleTime = std::chrono::high_resolution_clock::now();
 
@@ -54,7 +79,7 @@ int main(int argc, char **args)
         auto currentTime = std::chrono::high_resolution_clock::now();
         float dt = std::chrono::duration<float, std::chrono::milliseconds::period>(currentTime - lastCycleTime).count();
 
-        if (dt >= 16)
+        if (dt >= (float) 1000 / 60)
         {
             lastCycleTime = currentTime;
             chipEight.processInputs();

@@ -2,8 +2,10 @@
 #define CHIP8_EMU_CHIPEIGHT_H
 
 #include <cstdint>
-#include <SDL.h>
+#include <SDL2/SDL.h>
 #include <random>
+#include "Sound.h"
+#include <thread>
 
 /**
  * Starting point in memory where programs can begin writing
@@ -64,8 +66,11 @@ private:
     uint8_t keypad[16]{};
     uint16_t stack[16]{};
     uint8_t memory[4096]{};
+
     bool loadStoreQuirk;
     bool shiftQuirk;
+    Sound beeper;
+    int cyclesPerTick;
 
     void OP_00E0();
 
@@ -164,7 +169,9 @@ public:
 
     void writeToMemory(int index, uint8_t value);
 
-    ChipEight(bool loadStoreQuirk, bool shiftQuirk);
+    void decrementTimers();
+
+    ChipEight(bool _loadStoreQuirk, bool _shiftQuirk, int _cyclesPerTick);
 
     ~ChipEight();
 };
