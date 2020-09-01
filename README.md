@@ -5,9 +5,9 @@ A basic Chip-8 emulator (interpreter) written in C++ for Windows using SDL2 for 
 
 
 # Features
-1. 34 instructions as per this [Chip-8 specification](http://devernay.free.fr/hacks/chip8/C8TECH10.HTM#3.1) (first instruction is not necessary as stated)
-2. Toggleable quirks for shifts & loads/stores (on by default) - some programs worked using incorrect assumptions about how certain instructions worked
-3. Working sound
+* 34 instructions as per this [Chip-8 specification](http://devernay.free.fr/hacks/chip8/C8TECH10.HTM#3.1) (first instruction is not necessary as stated)
+* Toggleable "quirks" for certain shift, load and store instructions (on by default) which change their behaviour - some programs worked using incorrect assumptions about how certain instructions worked
+* Working sound
 
 **Note**: To pass some tests, such as the ["BC test"](https://slack-files.com/T3CH37TNX-F3RKEUKL4-b05ab4930d), the quirks
 must be turned **off**
